@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+import argparse
+import shutil
+
+
+cache_name = 'cache'
+executable_video_convert = 'ffpb' # or ffpemg
+threads = '16'
+
+def convert_h265(input_file,output_file,meta):
+    assert os.path.isfile(input_file)
+
+    scale = generate_scale_command(meta)
+
+    codec_video = 'libx265'
+    quality_video = '30' #0 (lossless) - 51 (worst); 17 - invisible loss 
+    quality_preset = '-preset slow' # faster fast medium slow slower
+
+    codec_audio = 'libvorbis'
+    quality_audio = '128k'
+
+    cmd = f'{executable_video_convert} -i {input_file} {scale} -threads {threads} -c:v {codec_video} {quality_preset} -crf {quality_video} -c:a {codec_audio} -b:a {quality_audio} -y {output_file}'
+
+    print(cmd)
+    subprocess.run(cmd,shell=True)
+
+def convert_h264(input_file,output_file,meta):
+    assert os.path.isfile(input_file)
+
+    scale = generate_scale_command(meta)
+
+    codec_video = 'libx264'
+    quality_video = '20' #0 (lossless) - 51 (worst); 17 - invisible loss 
+    quality_preset = '-preset slow' # faster fast medium slow slower
+
+    codec_audio = 'libvorbis'
+    quality_audio = '128k'
+
+    cmd = f'{executable_video_convert} -i {input_file} {scale} -threads {threads} -c:v {codec_video} {quality_preset} -crf {quality_video} -c:a {codec_audio} -b:a {quality_audio} -y {output_file}'
+
+    print(cmd)
+    subprocess.run(cmd,shell=True)
+
+def convert_vp9(input_file,output_file,meta):
+    assert os.path.isfile(input_file)
+
+    scale = generate_scale_command(meta)
+
+    codec_video = 'libvpx-vp9'
+    quality_video = '30' #0 (lossless) - 63 (worst); 17 - invisible loss 
+    quality_preset = '-deadline good' # good best
+
+    codec_audio = 'libvorbis'
+    quality_audio = '128k'
+
+
+    pass_1 = f'{executable_video_convert} -i {input_file} {scale} -threads {threads} -c:v {codec_video} -b:v 0 {quality_preset} -crf {quality_video} -pass 1 -an -f null /dev/null'
+    pass_2 = f'{executable_video_convert} -i {input_file} {scale} -row-mt 1 -threads {threads} -c:v {codec_video} -b:v 0 {quality_preset} -crf {quality_video} -pass 2 -c:a {codec_audio} -b:a {quality_audio} -y {output_file}'
+
+    print(pass_1)
+    subprocess.run(pass_1,shell=True)
+    print(pass_2)
+    subprocess.run(pass_2,shell=True)
+
+    os.remove('ffmpeg2pass-0.log')
+
+
+def convert_av1(input_file,output_file,meta):
+    assert os.path.isfile(input_file)
+
+    scale = generate_scale_command(meta)
+
+    codec_video = 'libaom-av1'
+    quality_video = '30' #0 (lossless) - 51 (worst); 17 - invisible loss 
+
+    codec_audio = 'libopus'
+    quality_audio = '128k'
+
+    cmd = f'{executable_video_convert} -i {input_file} {scale} -threads {threads} -c:v {codec_video} -strict experimental -crf {quality_video} -c:a {codec_audio} -b:a {quality_audio} -y {output_file}'
+
+    print(cmd)
+    subprocess.run(cmd,shell=True)
+
+def generate_scale_command(meta):
+    scale = ''
+    if meta['args'].width!=None:
+        scale = '-filter:v scale='+str(meta['args'].width)+':-1:force_original_aspect_ratio=decrease:force_divisible_by=2 '
+    return scale
+
+
+# List all video files in the current directory
+def list_video_files():
+    video_files_ext = ['.mp4', '.avi', '.mkv', '.webm']
+
+    video_files = []
+    for file in os.listdir('.'):
+        extension = os.path.splitext(file)[1]
+        if extension in video_files_ext:
+            video_files.append(file)
+
+    return video_files
+
+def create_target_file(video_files, meta):
+
+    template_target = [{'codec': 'h264', 'ext': '.mp4'},{'codec': 'h265', 'ext': '.mp4'},{'codec':'vp9','ext':'.webm'}]
+    if meta['args'].av1==True:
+        template_target.append({'codec': 'av1', 'ext': '.mkv'})
+
+    targets = []
+
+    for video_file in video_files:
+        root,ext = os.path.splitext(video_file)
+        
+        
+        for template in template_target:
+            attempt = os.path.join(cache_name, root+'-'+template['codec']+template['ext'])
+            if not os.path.exists(attempt):
+                current_target = {'input':video_file,'codec':template['codec'],'output':attempt}
+                targets.append(current_target)
+    return targets  
+
+
+
+
+
+
+def convert_video(targets,meta):
+
+    for target in targets:
+        codec = target['codec']
+        input_file = target['input']
+        output_file = target['output']
+
+        
+        if codec == 'h264':
+            convert_h264(input_file,output_file,meta)
+        if codec == 'h265':
+            convert_h265(input_file,output_file,meta)
+        if codec == 'vp9':
+            convert_vp9(input_file,output_file,meta)
+        if codec == 'av1':
+            convert_av1(input_file,output_file,meta)
+
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(prog='convert_video')
+    parser.add_argument('-w','--width',type=int,help='Width of the output video')
+    parser.add_argument('-f','--force',action='store_true',help='Force to clean cache')
+    parser.add_argument('--av1',action='store_true',help='Perform av1 conversion')
+    args = parser.parse_args()
+
+    if args.force and os.path.exists(cache_name):
+        shutil.rmtree(cache_name)
+   
+    
+    meta = {}
+    meta['args'] = args
+
+    video_files = list_video_files()
+    if not os.path.exists(cache_name):
+        os.makedirs(cache_name)
+
+    targets = create_target_file(video_files,meta)
+
+    
+    
+    convert_video(targets,meta)
+
+    
+    
+    if len(targets)==0:
+        print('All files already in',cache_name)
+    else:
+        print('Created conversion for the following files:')
+        for target in targets:
+            print(target['input'],'->',target['output'])
+
+        print('\nFiles can be added to the website using the following code:')
+        print('<video autoplay loop muted poster="poster.jpg">')
+        print('  <source src="cache/video-vp9.webm" type="video/webm">')
+        print('  <source src="cache/video-h265.mp4" type="video/mp4">')
+        print('  <source src="cache/video-h264.mp4" type="video/mp4">')
+        print('  "Cannot play video cache/video-h264.mp4"')
+        print('</video>')
+
