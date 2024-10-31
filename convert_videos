@@ -9,6 +9,7 @@ import shutil
 cache_name = 'cache'
 executable_video_convert = 'ffpb' # or ffpemg
 threads = '16'
+quality_video = 30 #0 (lossless) - 51 (worst); 17 - invisible loss 
 
 def convert_h265(input_file,output_file,meta):
     assert os.path.isfile(input_file)
@@ -16,7 +17,7 @@ def convert_h265(input_file,output_file,meta):
     scale = generate_scale_command(meta)
 
     codec_video = 'libx265'
-    quality_video = '30' #0 (lossless) - 51 (worst); 17 - invisible loss 
+    #quality_video = '30' #0 (lossless) - 51 (worst); 17 - invisible loss 
     quality_preset = '-preset slow' # faster fast medium slow slower
 
     codec_audio = 'libvorbis'
@@ -33,7 +34,7 @@ def convert_h264(input_file,output_file,meta):
     scale = generate_scale_command(meta)
 
     codec_video = 'libx264'
-    quality_video = '20' #0 (lossless) - 51 (worst); 17 - invisible loss 
+    #quality_video = '20' #0 (lossless) - 51 (worst); 17 - invisible loss 
     quality_preset = '-preset slow' # faster fast medium slow slower
 
     codec_audio = 'libvorbis'
@@ -50,7 +51,7 @@ def convert_vp9(input_file,output_file,meta):
     scale = generate_scale_command(meta)
 
     codec_video = 'libvpx-vp9'
-    quality_video = '30' #0 (lossless) - 63 (worst); 17 - invisible loss 
+    #quality_video = '30' #0 (lossless) - 63 (worst); 17 - invisible loss 
     quality_preset = '-deadline good' # good best
 
     codec_audio = 'libvorbis'
@@ -74,7 +75,7 @@ def convert_av1(input_file,output_file,meta):
     scale = generate_scale_command(meta)
 
     codec_video = 'libaom-av1'
-    quality_video = '30' #0 (lossless) - 51 (worst); 17 - invisible loss 
+    #quality_video = '30' #0 (lossless) - 51 (worst); 17 - invisible loss 
 
     codec_audio = 'libopus'
     quality_audio = '128k'
@@ -149,6 +150,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(prog='convert_video')
     parser.add_argument('-w','--width',type=int,help='Width of the output video')
+    parser.add_argument('-q','--quality',type=int,help='Video quality, 0:loseless, 51:worst, default:30')
     parser.add_argument('-f','--force',action='store_true',help='Force to clean cache')
     parser.add_argument('--av1',action='store_true',help='Perform av1 conversion')
     args = parser.parse_args()
@@ -159,6 +161,9 @@ if __name__ == '__main__':
     
     meta = {}
     meta['args'] = args
+
+    if args.quality!=None:
+        quality_video = args.quality
 
     video_files = list_video_files()
     if not os.path.exists(cache_name):
